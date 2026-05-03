@@ -36,31 +36,67 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerInstallCommand = registerInstallCommand;
 exports.installElephactor = installElephactor;
 exports.promptToInstallElephactor = promptToInstallElephactor;
+exports.composerInstallCommand = composerInstallCommand;
 const vscode = __importStar(require("vscode"));
 const constants_1 = require("./constants");
 const composerProject_1 = require("./composerProject");
+const installPicks = [
+    {
+        label: "Install globally",
+        description: composerInstallCommand("global"),
+        detail: "Makes the elephactor command available without adding it to each project.",
+        target: "global",
+    },
+    {
+        label: "Install as project dev dependency",
+        description: composerInstallCommand("project"),
+        detail: "Adds Elephactor to require-dev in the nearest Composer project.",
+        target: "project",
+    },
+];
 function registerInstallCommand() {
     return vscode.commands.registerCommand(constants_1.commandIds.installElephactor, async (uri) => {
         await installElephactor(uri);
     });
 }
 async function installElephactor(uri) {
-    const composerRoot = await (0, composerProject_1.resolveComposerRootForInstall)(uri);
-    if (composerRoot === undefined) {
-        vscode.window.showErrorMessage("Could not find composer.json for Elephactor installation.");
+    const installTarget = await selectInstallTarget();
+    if (installTarget === undefined) {
         return;
     }
+    const terminalOptions = {
+        name: installTarget === "global" ? "Elephactor Global Install" : "Elephactor Project Install",
+    };
+    if (installTarget === "project") {
+        const composerRoot = await (0, composerProject_1.resolveComposerRootForInstall)(uri);
+        if (composerRoot === undefined) {
+            vscode.window.showErrorMessage("Could not find composer.json for project Elephactor installation.");
+            return;
+        }
+        terminalOptions.cwd = composerRoot;
+    }
     const terminal = vscode.window.createTerminal({
-        name: "Elephactor Install",
-        cwd: composerRoot,
+        ...terminalOptions,
     });
     terminal.show();
-    terminal.sendText("composer require --dev tim-lappe/elephactor");
+    terminal.sendText(composerInstallCommand(installTarget));
 }
 async function promptToInstallElephactor(uri) {
-    const selectedAction = await vscode.window.showWarningMessage("Elephactor is not installed in this Composer project.", constants_1.installAction);
+    const selectedAction = await vscode.window.showWarningMessage("Elephactor is not installed. Install it globally or as a project dev dependency to enable PHP refactorings.", constants_1.installAction);
     if (selectedAction === constants_1.installAction) {
         await vscode.commands.executeCommand(constants_1.commandIds.installElephactor, uri);
     }
+}
+function composerInstallCommand(target) {
+    if (target === "global") {
+        return `composer global require ${constants_1.elephactorComposerPackage}:@dev`;
+    }
+    return `composer require --dev ${constants_1.elephactorComposerPackage}`;
+}
+async function selectInstallTarget() {
+    const selectedPick = await vscode.window.showQuickPick(installPicks, {
+        placeHolder: "How do you want to install Elephactor?",
+    });
+    return selectedPick?.target;
 }
 //# sourceMappingURL=installCommand.js.map
